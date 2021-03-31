@@ -10,6 +10,7 @@ from matplotlib.animation import FuncAnimation
 import matplotlib.pyplot as plt
 import numpy as np
 import sounddevice as sd
+from IPython.display import HTML
 
 
 def int_or_str(text):
@@ -34,30 +35,23 @@ parser = argparse.ArgumentParser(
     parents=[parser])
 parser.add_argument(
     'channels', type=int, default=[1,2], nargs='*', metavar='CHANNEL',
-    help='output channels to plot (default: the first)')
+    help='input channels to plot (default: the first)')
 parser.add_argument(
     '-d', '--device', type=int_or_str,
-    help='output device (numeric ID or substring)')
+    help='input device (numeric ID or substring)')
 parser.add_argument(
-    '-w', '--window', type=float, default=15, metavar='DURATION',
+    '-w', '--window', type=float, default=200, metavar='DURATION',
     help='visible time slot (default: %(default)s ms)')
 parser.add_argument(
-    '-i', '--interval', type=float, default=10,
+    '-i', '--interval', type=float, default=30,
     help='minimum time between plot updates (default: %(default)s ms)')
 parser.add_argument(
     '-b', '--blocksize', type=int, help='block size (in samples)')
 parser.add_argument(
     '-r', '--samplerate', type=float, help='sampling rate of audio device')
 parser.add_argument(
-    '-n', '--downsample', type=int, default=1, metavar='N',
+    '-n', '--downsample', type=int, default=10, metavar='N',
     help='display every Nth sample (default: %(default)s)')
-parser.add_argument(
-    '-a', '--amplitude', type=float, default=0.2,
-    help='amplitude (default: %(default)s)')
-parser.add_argument(
-    'frequency', nargs='?', metavar='FREQUENCY', type=float, default=2000,
-    help='frequency in Hz (default: %(default)s)')
-
 args = parser.parse_args(remaining)
 if any(c < 1 for c in args.channels):
     parser.error('argument CHANNEL: must be >= 1')
@@ -65,21 +59,12 @@ mapping = [c - 1 for c in args.channels]  # Channel numbers start with 1
 q = queue.Queue()
 
 
-def audio_callback(outdata, frames, time, status):
+def audio_callback(indata, frames, time, status):
     """This is called (from a separate thread) for each audio block."""
     if status:
         print(status, file=sys.stderr)
     # Fancy indexing with mapping creates a (necessary!) copy:
-    global start_idx
-    global phi
-    t = (start_idx + np.arange(frames)) / samplerate
-
-    sin1 = args.amplitude * np.sin(2 * np.pi * 1000 * t+phi)/2
-    sin2 = args.amplitude * np.sin(2 * np.pi * 500 * t+phi)/2
-    outdata[:,:] = np.array([sin1,sin2]).T
-    start_idx += frames
-
-    q.put(outdata[::args.downsample, mapping])
+    q.put(indata[::args.downsample, mapping])
 
 
 def update_plot(frame):
@@ -100,13 +85,10 @@ def update_plot(frame):
         line.set_ydata(plotdata[:, column])
     return lines
 
-start_idx = 0
-phi = 0
-fs = 48000
+
 try:
-    samplerate = sd.query_devices(args.device, 'output')['default_samplerate']
     if args.samplerate is None:
-        device_info = sd.query_devices(args.device, 'output')
+        device_info = sd.query_devices(args.device, 'input')
         args.samplerate = device_info['default_samplerate']
 
     length = int(args.window * args.samplerate / (1000 * args.downsample))
@@ -117,22 +99,19 @@ try:
     if len(args.channels) > 1:
         ax.legend(['channel {}'.format(c) for c in args.channels],
                   loc='lower left', ncol=len(args.channels))
-    ax.axis((0, int(len(plotdata)/2), -1, 1))
-    #ax.set_yticks([0])
-    #ax.yaxis.grid(True)
-    #ax.tick_params(bottom=False, top=False, labelbottom=False,
-    #               right=False, left=False, labelleft=False)
-    #fig.tight_layout(pad=0)
+    ax.axis((0, len(plotdata), -1, 1))
+    ax.set_yticks([0])
+    ax.yaxis.grid(True)
+    ax.tick_params(bottom=False, top=False, labelbottom=False,
+                   right=False, left=False, labelleft=False)
+    fig.tight_layout(pad=0)
 
-    stream = sd.OutputStream(
+    stream = sd.InputStream(
         device=args.device, channels=max(args.channels),
-        samplerate=fs, callback=audio_callback)
+        samplerate=args.samplerate, callback=audio_callback)
     ani = FuncAnimation(fig, update_plot, interval=args.interval, blit=True)
     with stream:
-
         plt.show()
-        
-
-    
+        #HTML(ani.to_jshtml())
 except Exception as e:
     parser.exit(type(e).__name__ + ': ' + str(e))

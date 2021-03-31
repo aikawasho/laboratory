@@ -41,48 +41,34 @@ args = parser.parse_args(remaining)
 start_idx = 0
 f = 40000
 fs = 192000
-A = 1.95
+
 pi = np.pi
 phase_list = []
 A_list = []
+A = 1.95
 tp_num = 0
+levi = 0
 #tp_list =  np.arange(-0.0,-30.0,-0.5)
-tp_list =  np.arange(-21.0,-4.9,0.1)
+
+tp_list =  np.arange(-25.0,-4.9,0.1)
 tp_list = np.round(tp_list, 2)
 np.set_printoptions(precision=1)
-
-#for i,t in enumerate(tp_list):
- #   if t >= -13 and t <= -12.5:
-  #      t = -12.5
-   # tp_list[i] = t
-    
-#for i,t in enumerate(tp_list):
- #   if t >= -15 and t < -14:
-  #      t = -14
-   # tp_list[i] = t
-    
 for tp in tp_list:
 
-
-   
-        filename ='/Users/shota/Documents/klo_lab/matlab/phase/210222/LSw-25'+str(tp)+'.mat'
-        phase_0 = sio.loadmat(filename)
-        phase = phase_0['phix']
-        A_sin = phase_0['sin_A']   
-        phase_list.append(phase)
-        A_list.append(A_sin)
-        #filename ='/Users/shota/Documents/klo_lab/matlab/phase/20201112/w-25'+str(tp)+'.mat'
-        #phase_0 = sio.loadmat(filename)
-        #phase = phase_0['phix']
-        #phase_list.append(phase)
-        #A_list.append(np.ones(8))
-        
+    #filename ='/Users/shota/Documents/klo_lab/matlab/phase/20201105/no'+str(tp)+'.mat'
+    #phase_0 = sio.loadmat(filename)
+    #phase = phase_0['phix']
+    #phase_list.append(phase)
+    #A_list.append(np.ones(8))
+    filename ='/Users/shota/Documents/klo_lab/matlab/phase/210222/LSw-25'+str(tp)+'.mat'
+    phase_0 = sio.loadmat(filename)
+    phase = phase_0['phix']
+    A_sin = phase_0['sin_A']   
+    phase_list.append(phase)
+    A_list.append(A_sin)
+    
 A_list.append(np.ones(8))
 phase_list.append(np.zeros(8))
-#tp_list = np.append(tp_list,0.0)
-        
-
-    
 
 def callback(outdata, frames, time, status):
    # if status:
@@ -103,16 +89,22 @@ def callback(outdata, frames, time, status):
     outdata[:,16] = A*np.reshape(2.11 *A_list[tp_num][6]*np.sin(2 * np.pi * f * t-phase_list[tp_num][6]),outdata[:,0].shape)
     outdata[:,17] = A*np.reshape(2.11 *A_list[tp_num][7]*np.sin(2 * np.pi * f * t-phase_list[tp_num][7]),outdata[:,0].shape)
     start_idx += frames
+    if levi == 1 and tp_num != len(tp_list)-1:
+        tp_num += 1
+    else:
+        if tp_num != 0 and levi == 0:
+            tp_num -= 1
        
 with sd.OutputStream(device=4, channels=28, callback=callback,
-                              samplerate=fs,blocksize = 0):
+                              samplerate=fs,blocksize=8000):
     
     while True:
-        print(tp_list[tp_num])
         
         key = input()
         if key == '':
-            if tp_num == len(tp_list)-1:
-                tp_num = len(tp_list)-1
+            if levi == 0:
+                levi = 1
+                print('Rising')
             else:
-                tp_num += 1
+                levi = 0
+                print('Dropping')
